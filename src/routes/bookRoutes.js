@@ -10,7 +10,7 @@ router.post("/", protectRoute, async (req, res) => {
   try {
     const { title, author, caption, rating, image, pdfFile } = req.body;
 
-    if (!image || !title || !caption || !rating || !pdfFile || !author) {
+    if (!image || !title || !caption ) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
