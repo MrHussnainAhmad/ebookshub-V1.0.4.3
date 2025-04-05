@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import User from "../models/User.js"; // Fix: Correct path to User model
+import User from "../models/User.js";
 
 const protectRoute = async (req, res, next) => {
   try {
@@ -10,25 +10,42 @@ const protectRoute = async (req, res, next) => {
     
     const token = req.header("Authorization").replace("Bearer ", "");
     
-    //check if token exists
+    // Check if token exists
     if (!token) {
       return res.status(401).json({ message: "You need to login first" });
     }
     
-    //verify token
+    // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    //find user
+    // Check if userId exists in decoded token
+    if (!decoded.userId) {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+    
+    // Find user
     const user = await User.findById(decoded.userId).select("-password");
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // Set user and userId in request object
     req.user = user;
+    req.userId = decoded.userId;
+    
     next();
   } catch (error) {
-    console.error(error);
-    res.status(401).json({ message: "Not authorized, token failed" });
+    console.error("Auth middleware error:", error);
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+    
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: "Token expired" });
+    }
+    
+    res.status(401).json({ message: "Authentication failed" });
   }
 };
 
