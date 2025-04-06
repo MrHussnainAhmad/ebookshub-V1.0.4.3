@@ -27,20 +27,13 @@ const userSchema = new mongoose.Schema(
       enum: ["reader", "author"], // Restrict to two roles
       required: true,
       default: "reader",
-    },
-    authorId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Author",
-      default: null,
-    },    
+    },   
     books: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Book",
       },
     ],
-    likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // Users who liked this author
-    dislikes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // Users who disliked this author
   },
   { timestamps: true }
 );

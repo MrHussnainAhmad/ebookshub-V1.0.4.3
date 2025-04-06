@@ -97,7 +97,7 @@ const handlePdfUpload = async (filePath, fileName) => {
   }
 };
 
-// Create a new book - updated to handle authorId
+// Create a new book - updated to remove authorId
 router.post("/", protectRoute, upload.single("pdfFile"), async (req, res) => {
   let tempFilePath = null;
 
@@ -105,28 +105,17 @@ router.post("/", protectRoute, upload.single("pdfFile"), async (req, res) => {
     console.log("Request body fields:", Object.keys(req.body));
     console.log("File received:", req.file ? req.file.originalname : "No file");
 
-    const { title, author, caption, image, genre, authorId } = req.body;
+    const { title, author, caption, image, genre } = req.body;
 
     // Validate required fields
     if (!title?.trim())
       return res.status(400).json({ message: "Title is required" });
     if (!author?.trim())
       return res.status(400).json({ message: "Author name is required" });
-    if (!authorId)
-      return res.status(400).json({ message: "Author ID is required" });
     if (!caption?.trim())
       return res.status(400).json({ message: "Caption is required" });
     if (!image) return res.status(400).json({ message: "Image is required" });
     if (!genre) return res.status(400).json({ message: "Genre is required" });
-
-    // Verify that the authorId is valid and refers to a user with userType "author"
-    const authorUser = await User.findById(authorId);
-    if (!authorUser) {
-      return res.status(404).json({ message: "Author not found" });
-    }
-    if (authorUser.userType !== "author") {
-      return res.status(400).json({ message: "Selected user is not an author" });
-    }
 
     // Handle PDF upload - from file upload or base64
     let pdfUrl = null;
@@ -173,11 +162,10 @@ router.post("/", protectRoute, upload.single("pdfFile"), async (req, res) => {
     });
     console.log("Image uploaded successfully:", imageResult.secure_url);
 
-    // Create new book with authorId
+    // Create new book without authorId
     const book = new Book({
       title: title.trim(),
       author: author.trim(), // Text name of author
-      authorId: authorId, // Reference to User document
       caption: caption.trim(),
       image: imageResult.secure_url,
       pdfFile: pdfUrl,
@@ -188,20 +176,12 @@ router.post("/", protectRoute, upload.single("pdfFile"), async (req, res) => {
     await book.save();
     console.log("Book saved successfully:", book._id);
 
-    // Add this book to the author's books array
-    await User.findByIdAndUpdate(
-      authorId,
-      { $push: { books: book._id } },
-      { new: true }
-    );
-
     res.status(201).json({
       message: "Book created successfully",
       book: {
         _id: book._id,
         title: book.title,
         author: book.author,
-        authorId: book.authorId,
         image: book.image,
         genre: book.genre,
       },
@@ -617,17 +597,18 @@ router.post("/:id/rate", protectRoute, async (req, res) => {
   }
 });
 
-// Replace the duplicate GET /:id routes with this single route handler
+// Get book details
 router.get("/:id", protectRoute, async (req, res) => {
   try {
     const bookId = req.params.id;
     const userId = req.user._id;
     const book = await Book.findById(bookId)
-      .populate("user", "username profileImage") // Uploader details
-      .populate("authorId", "username profileImage"); // Author details
+      .populate("user", "username profileImage"); // Uploader details
+    
     if (!book) {
       return res.status(404).json({ message: "Book not found" });
     }
+    
     // Check if user has rated this book and include that information
     let userRating = null;
     if (book.ratings && book.ratings.length > 0) {
@@ -638,60 +619,17 @@ router.get("/:id", protectRoute, async (req, res) => {
         userRating = userRatingObj.value;
       }
     }
+    
     // Add userRating to the response
     const bookWithUserRating = {
       ...book.toObject(),
-      userRating,
-      // Make sure authorId is explicitly included in the response
-      authorId: book.authorId ? book.authorId._id : null
+      userRating
     };
+    
     res.json(bookWithUserRating);
   } catch (error) {
     console.error("Error fetching book details:", error);
     res.status(500).json({ message: "Failed to fetch book details" });
-  }
-});
-
-// Get books by author ID
-router.get("/author/:authorId", protectRoute, async (req, res) => {
-  try {
-    const { authorId } = req.params;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-
-    // Verify the author exists
-    const author = await User.findById(authorId);
-    if (!author) {
-      return res.status(404).json({ message: "Author not found" });
-    }
-    if (author.userType !== "author") {
-      return res.status(400).json({ message: "User is not an author" });
-    }
-
-    // Get books with pagination where authorId matches
-    const books = await Book.find({ authorId: authorId })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate("user", "username profileImage");
-
-    const total = await Book.countDocuments({ authorId: authorId });
-
-    res.json({
-      books,
-      author: {
-        id: author._id,
-        username: author.username,
-        profileImage: author.profileImage
-      },
-      currentPage: page,
-      totalBooks: total,
-      totalPages: Math.ceil(total / limit),
-    });
-  } catch (error) {
-    console.error("Error fetching author's books:", error);
-    res.status(500).json({ message: "Failed to fetch author's books" });
   }
 });
 

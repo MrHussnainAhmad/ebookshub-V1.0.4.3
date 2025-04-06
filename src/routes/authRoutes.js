@@ -3,8 +3,6 @@ import User from "../models/User.js";
 const router = express.Router();
 import jwt from "jsonwebtoken";
 import protectRoute from "../middlewares/auth.middleware.js";
-import authorRoutes from "../routes/authorRoutes.js";
-import Author from "../models/Author.js";
 
 //TokenGenerator
 const generateToken = (userId) => {
@@ -51,14 +49,6 @@ router.post("/register", async (req, res) => {
     });
 
     await user.save();
-    let authorId = null;
-    if (userType === "author") {
-      const newAuthor = new Author({
-        user: user._id,
-      });
-      await newAuthor.save();
-      authorId = newAuthor._id;
-    }
 
     const token = generateToken(user._id);
 
@@ -70,7 +60,6 @@ router.post("/register", async (req, res) => {
         email: user.email,
         profileImage: user.profileImage,
         userType: user.userType,
-        authorId: authorId,
         createdAt: user.createdAt,
       },
     });
@@ -108,15 +97,6 @@ router.post("/login", async (req, res) => {
     //genToken:
     const token = generateToken(user._id);
 
-    // Get author ID if user type is author
-    let authorId = null;
-    if (user.userType === "author") {
-      const author = await Author.findOne({ user: user._id });
-      if (author) {
-        authorId = author._id;
-      }
-    }
-
     res.status(200).json({
       token,
       user: {
@@ -125,7 +105,6 @@ router.post("/login", async (req, res) => {
         email: user.email,
         profileImage: user.profileImage,
         userType: user.userType,
-        authorId: authorId,
         createdAt: user.createdAt,
       },
     });
