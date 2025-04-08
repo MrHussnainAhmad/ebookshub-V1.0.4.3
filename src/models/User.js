@@ -34,6 +34,10 @@ const userSchema = new mongoose.Schema(
         ref: "Book",
       },
     ],
+    verified: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
