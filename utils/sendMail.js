@@ -1,29 +1,31 @@
-// Change from CommonJS to ES Module syntax
+// utils/sendMail.js
 import nodemailer from "nodemailer";
 
 const sendMail = async (email, subject, text) => {
   try {
+    // Create a Gmail SMTP transport
     const transporter = nodemailer.createTransport({
-      host: process.env.HOST,
-      service: process.env.SERVICE,
-      port: Number(process.env.EMAIL_PORT),
-      secure: Boolean(process.env.SECURE),
+      service: "gmail",
       auth: {
-        user: process.env.USER,
-        pass: process.env.PASS
-      },
+        user: "ebooks.hub.live@gmail.com",
+        pass: "ksykizloaxyaxvva" // App password, no spaces
+      }
     });
 
-    await transporter.sendMail({
-      from: process.env.USER,
+    // Send the email
+    const info = await transporter.sendMail({
+      from: '"eBooksHub" <ebooks.hub.live@gmail.com>',
       to: email,
       subject: subject,
       text: text,
     });
-    console.log("Email sent successfully");
+
+    console.log("Email sent successfully to", email);
+    console.log("Message ID:", info.messageId);
+    return true;
   } catch (error) {
     console.error("Error sending email:", error);
-    throw new Error("Email sending failed");
+    return false;
   }
 };
 

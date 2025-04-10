@@ -22,6 +22,8 @@ app.get("/", (req, res) => {
     res.send("Welcome to the home route");
 });
 
+
+
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
     connectDB();
