@@ -16,7 +16,7 @@ const generateToken = (userId) => {
 
 //Email Verification:
 const sendVerificationEmail = async (user, verificationToken) => {
-  const baseUrl = process.env.BASE_URL || "https://ebookshub.up.railway.app"; // Fallback to your local server
+  const baseUrl = process.env.BASE_URL || "http://192.168.100.24:3001"; // Fallback to your local server
   const verificationUrl = `${baseUrl}/api/auth/verify/${user._id}/${verificationToken}`;
 
   const emailSubject = "eBooksHub - Verify Your Email Address";
@@ -600,6 +600,19 @@ router.put("/update-password", protectRoute, async (req, res) => {
     console.error("Update password error:", error);
     res.status(500).json({ message: "Error updating password" });
   }
+});
+
+//token for notification
+router.post("/save-token", protectRoute, async (req, res) => {
+  const { expoPushToken } = req.body;
+
+  const user = await User.findById(req.userId);
+  if (!user) return res.status(404).json({ message: "User not found" });
+
+  user.expoPushToken = expoPushToken;
+  await user.save();
+
+  res.status(200).json({ message: "Token saved" });
 });
 
 export default router;

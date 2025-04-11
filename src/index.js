@@ -5,6 +5,8 @@ import cors from "cors";
 import authRoutes from "./routes/authRoutes.js";
 import bookRoutes from "./routes/bookRoutes.js";
 import { connectDB } from "./lib/db.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
+
 
 
 const app = express();
@@ -17,9 +19,10 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cors());
 app.use("/api/auth", authRoutes);
 app.use("/api/books", bookRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 app.get("/", (req, res) => {
-    res.send("Welcome to the home route");
+    res.send("Welcome to the home route of eBooksHub!");
 });
 
 

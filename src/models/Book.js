@@ -74,6 +74,10 @@ const bookSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    pdfPublicId: {
+      type: String,
+      default: null
+    },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
