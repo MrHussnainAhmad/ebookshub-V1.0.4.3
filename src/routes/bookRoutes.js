@@ -98,83 +98,64 @@ const handlePdfUpload = async (filePath, fileName) => {
 };
 
 // Create a new book - updated to remove authorId
+// Create a new book - updated to include pdfPublicId
 router.post("/", protectRoute, upload.single("pdfFile"), async (req, res) => {
   let tempFilePath = null;
 
   try {
-    console.log("Request body fields:", Object.keys(req.body));
-    console.log("File received:", req.file ? req.file.originalname : "No file");
-
     const { title, author, caption, image, genre } = req.body;
 
-    // Validate required fields
-    if (!title?.trim())
-      return res.status(400).json({ message: "Title is required" });
-    if (!author?.trim())
-      return res.status(400).json({ message: "Author name is required" });
-    if (!caption?.trim())
-      return res.status(400).json({ message: "Caption is required" });
+    if (!title?.trim()) return res.status(400).json({ message: "Title is required" });
+    if (!author?.trim()) return res.status(400).json({ message: "Author name is required" });
+    if (!caption?.trim()) return res.status(400).json({ message: "Caption is required" });
     if (!image) return res.status(400).json({ message: "Image is required" });
     if (!genre) return res.status(400).json({ message: "Genre is required" });
 
-    // Handle PDF upload - from file upload or base64
     let pdfUrl = null;
+    let pdfPublicId = null;
     let pdfFileName = null;
 
-    // Handle uploaded file
     if (req.file) {
-      console.log("Processing uploaded PDF file");
       pdfFileName = req.file.originalname;
       tempFilePath = req.file.path;
-      pdfUrl = await handlePdfUpload(tempFilePath, pdfFileName);
-    }
-    // Handle base64 PDF data
-    else if (req.body.pdfBase64) {
-      console.log("Processing base64 PDF data");
+    } else if (req.body.pdfBase64) {
       pdfFileName = req.body.pdfFileName || `${Date.now()}-book.pdf`;
       tempFilePath = `${TMP_DIR}/${Date.now()}-${pdfFileName}`;
-
-      // Convert base64 to file
       fs.writeFileSync(tempFilePath, Buffer.from(req.body.pdfBase64, "base64"));
-      console.log(`Base64 data written to temp file: ${tempFilePath}`);
-
-      pdfUrl = await handlePdfUpload(tempFilePath, pdfFileName);
-    }
-    // Handle mobile PDF file via URI
-    else if (req.body.pdfUri) {
-      console.log("Processing PDF URI:", req.body.pdfUri);
-      pdfFileName = req.body.fileName || `${Date.now()}-book.pdf`;
-
-      // For mobile app file URI handling, we would need to use a mobile-specific approach
-      // This is just a placeholder - the actual implementation would depend on your mobile app setup
-      return res.status(400).json({
-        message:
-          "Direct URI upload not supported yet. Please use base64 encoding for now.",
-      });
     } else {
       return res.status(400).json({ message: "PDF File is required" });
     }
 
-    // Upload image to Cloudinary
-    console.log("Uploading image to Cloudinary");
-    const imageResult = await cloudinary.uploader.upload(image, {
-      timeout: 60000, // 60 second timeout
-    });
-    console.log("Image uploaded successfully:", imageResult.secure_url);
+    const baseFileName = path.basename(pdfFileName, path.extname(pdfFileName));
+    const cloudinaryPublicId = `pdfs/${baseFileName}-${Date.now()}`;
 
-    // Create new book without authorId
+    const uploadResult = await cloudinary.uploader.upload(tempFilePath, {
+      resource_type: "raw",
+      public_id: cloudinaryPublicId,
+      timeout: 120000,
+    });
+
+    pdfUrl = uploadResult.secure_url;
+    pdfPublicId = uploadResult.public_id;
+
+    cleanupTempFile(tempFilePath);
+
+    const imageResult = await cloudinary.uploader.upload(image, {
+      timeout: 60000,
+    });
+
     const book = new Book({
       title: title.trim(),
-      author: author.trim(), // Text name of author
+      author: author.trim(),
       caption: caption.trim(),
       image: imageResult.secure_url,
+      genre,
       pdfFile: pdfUrl,
-      genre: genre,
-      user: req.user._id, // User who uploaded the book
+      pdfPublicId,
+      user: req.user._id,
     });
 
     await book.save();
-    console.log("Book saved successfully:", book._id);
 
     res.status(201).json({
       message: "Book created successfully",
@@ -188,15 +169,12 @@ router.post("/", protectRoute, upload.single("pdfFile"), async (req, res) => {
     });
   } catch (error) {
     console.error("Book creation error:", error);
-    res.status(500).json({
-      message: error.message || "Failed to create book",
-      details: process.env.NODE_ENV === "development" ? error.stack : undefined,
-    });
+    res.status(500).json({ message: error.message || "Failed to create book" });
   } finally {
-    // Ensure temporary file is cleaned up
     cleanupTempFile(tempFilePath);
   }
 });
+
 
 // Get books with pagination and filtering
 router.get("/", protectRoute, async (req, res) => {

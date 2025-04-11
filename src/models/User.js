@@ -21,6 +21,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    sex:{
+      type: String,
+      enum:["Male","Female","Other","Prefer not to say"],
+      default: "Prefer not to say"
+    },
     userType: {
       type: String,
       enum: ["reader", "author"], // Restrict to two roles

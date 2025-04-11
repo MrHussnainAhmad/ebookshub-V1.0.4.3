@@ -505,6 +505,7 @@ li {
     res.status(500).json({ message: "Verification failed" });
   }
 });
+
 // Update username - USING MIDDLEWARE
 router.put("/update-username", protectRoute, async (req, res) => {
   try {
@@ -545,6 +546,37 @@ router.put("/update-username", protectRoute, async (req, res) => {
   } catch (error) {
     console.error("Update username error:", error);
     res.status(500).json({ message: "Error updating username" });
+  }
+});
+
+// Update sex
+router.put("/update-sex", protectRoute, async (req, res) => {
+  try {
+    const { sex } = req.body;
+    const userId = req.userId || req.user._id;
+
+    const allowedValues = ["Male", "Female", "Other", "Prefer not to say"];
+    if (!allowedValues.includes(sex)) {
+      return res.status(400).json({ message: "Invalid sex value" });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { sex },
+      { new: true }
+    ).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      message: "Sex updated successfully",
+      user,
+    });
+  } catch (error) {
+    console.error("Error updating sex:", error);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
