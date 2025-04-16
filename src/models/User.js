@@ -28,7 +28,7 @@ const userSchema = new mongoose.Schema(
     },
     userType: {
       type: String,
-      enum: ["reader", "author"], // Restrict to two roles
+      enum: ["reader", "author", "admin"],
       required: true,
       default: "reader",
     },   

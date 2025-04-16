@@ -91,6 +91,15 @@ const bookSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Premium book features
+    isPremium: {
+      type: Boolean,
+      default: false
+    },
+    premiumDisplayUntil: {
+      type: Date,
+      default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+    },
     // Array to store individual user ratings
     ratings: [
       {

@@ -65,30 +65,16 @@ router.post("/register", async (req, res) => {
     }
 
     // Check for existing email AND username together
-    const [existingEmail, existingUsername] = await Promise.all([
+    const [existingEmail, ] = await Promise.all([
       User.findOne({ email }),
-      User.findOne({ username }),
     ]);
 
     // Better error reporting - check both conditions
-    if (existingEmail && existingUsername) {
-      return res.status(400).json({
-        message: "Both email and username already exist",
-        type: "duplicate_both",
-      });
-    }
 
     if (existingEmail) {
       return res.status(400).json({
         message: "Email already exists",
         type: "duplicate_email",
-      });
-    }
-
-    if (existingUsername) {
-      return res.status(400).json({
-        message: "Username already exists",
-        type: "duplicate_username",
       });
     }
 
@@ -645,6 +631,58 @@ router.post("/save-token", protectRoute, async (req, res) => {
   await user.save();
 
   res.status(200).json({ message: "Token saved" });
+});
+
+// In your authRoutes.js file, add this new route
+router.post("/create-admin", async (req, res) => {
+  try {
+    const { email, username, password } = req.body;
+    
+    // Basic validation
+    if (!email || !username || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "All fields are required" 
+      });
+    }
+    
+    // Create admin user
+    const profileImage = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
+    const admin = new User({
+      email,
+      username,
+      password,
+      profileImage,
+      userType: "admin", // Set user type to admin
+      verified: true // Auto-verify admin
+    });
+    
+    await admin.save();
+    
+    // Generate token for the new admin
+    const token = generateToken(admin._id);
+    
+    res.status(201).json({
+      success: true,
+      message: "Admin account created successfully",
+      token,
+      user: {
+        id: admin._id,
+        username: admin.username,
+        email: admin.email,
+        profileImage: admin.profileImage,
+        userType: admin.userType,
+        verified: admin.verified
+      }
+    });
+  } catch (error) {
+    console.error("Admin creation error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error creating admin account",
+      error: error.message
+    });
+  }
 });
 
 export default router;

@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
-const protectRoute = async (req, res, next) => {
+const adminRoute = async (req, res, next) => {
   try {
     // Check if Authorization header exists
     if (!req.header("Authorization")) {
@@ -41,11 +41,11 @@ const protectRoute = async (req, res, next) => {
       });
     }
 
-    // Check if user is verified (if you have this field)
-    if (user.verified === false) {
+    // Check if user is admin
+    if (user.userType !== "admin") {
       return res.status(403).json({
         success: false,
-        message: "Please verify your email to access this resource"
+        message: "Access denied. Admin privileges required."
       });
     }
 
@@ -55,7 +55,7 @@ const protectRoute = async (req, res, next) => {
     
     next();
   } catch (error) {
-    console.error("Auth middleware error:", error);
+    console.error("Admin middleware error:", error);
     
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ 
@@ -78,4 +78,4 @@ const protectRoute = async (req, res, next) => {
   }
 };
 
-export default protectRoute;
+export default adminRoute;

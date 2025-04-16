@@ -97,7 +97,51 @@ const handlePdfUpload = async (filePath, fileName) => {
   }
 };
 
-// Create a new book - updated to remove authorId
+// Get public featured books
+router.get("/public/featured", async (req, res) => {
+  try {
+    const featuredBooks = await Book.find()
+      .sort({ createdAt: -1 })
+      .limit(4)
+      .select("title author image genre caption"); // Limited data
+      
+    res.json(featuredBooks);
+  } catch (error) {
+    console.error("Error fetching public featured books:", error);
+    res.status(500).json({ message: "Failed to fetch books" });
+  }
+});
+
+// Get public trending books
+router.get("/public/trending", async (req, res) => {
+  try {
+    const trendingBooks = await Book.find()
+      .sort({ views: -1 })
+      .limit(4)
+      .select("title author image genre caption"); // Limited data
+      
+    res.json(trendingBooks);
+  } catch (error) {
+    console.error("Error fetching public trending books:", error);
+    res.status(500).json({ message: "Failed to fetch books" });
+  }
+});
+
+// Get public genres for filtering
+router.get("/public/genres", async (req, res) => {
+  try {
+    const genreCounts = await Book.aggregate([
+      { $group: { _id: "$genre", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]);
+    
+    res.json(genreCounts);
+  } catch (error) {
+    console.error("Error fetching public genres:", error);
+    res.status(500).json({ message: "Failed to fetch genres" });
+  }
+});
+
 // Create a new book - updated to include pdfPublicId
 router.post("/", protectRoute, upload.single("pdfFile"), async (req, res) => {
   let tempFilePath = null;
@@ -292,9 +336,17 @@ router.get("/genre/:genreName", protectRoute, async (req, res) => {
 // Get premium books
 router.get("/premium", protectRoute, async (req, res) => {
   try {
-    const premiumBooks = await Book.find({ author: "Hussnain Ahmad" })
+    const now = new Date();
+
+    const premiumBooks = await Book.find({
+      isPremium: true,
+      $or: [
+        { premiumDisplayUntil: { $exists: false } },
+        { premiumDisplayUntil: { $gte: now } },
+      ],
+    })
       .sort({ createdAt: -1 })
-      .limit(2)
+      .limit(4)
       .populate("user", "username profileImage");
 
     res.json(premiumBooks);
@@ -687,14 +739,69 @@ router.post("/:id/comments", protectRoute, async (req, res) => {
 // Delete book - Comprehensive approach for Cloudinary deletion
 router.delete("/:id", protectRoute, async (req, res) => {
   try {
+    console.log("Delete book request received for ID:", req.params.id);
+    console.log("User attempting deletion:", req.user._id, "Role:", req.user.userType);
+    
     const book = await Book.findById(req.params.id);
     if (!book) {
+      console.log("Book not found");
       return res.status(404).json({ message: "Book not found" });
     }
-
+    
+    console.log("Book found. Owner:", book.user);
+    
     // Authorization check
-    if (book.user.toString() !== req.user._id.toString()) {
+    if (book.user.toString() !== req.user._id.toString() && req.user.userType !== "admin") {
+      console.log("Authorization failed - not owner or admin");
       return res.status(403).json({ message: "Not authorized to delete this book" });
+    }
+    
+    console.log("Authorization passed, proceeding with deletion");
+    
+    // Delete image from Cloudinary
+    if (book.image && book.image.includes("cloudinary")) {
+      try {
+        // Extract public ID for image (format: https://res.cloudinary.com/[cloud_name]/image/upload/v1234567890/[public_id].jpg)
+        const imagePublicId = book.image.split('/').slice(-1)[0].split('.')[0];
+        console.log("Deleting image with public ID:", imagePublicId);
+        await cloudinary.uploader.destroy(imagePublicId);
+        console.log("Image deleted from Cloudinary");
+      } catch (imageError) {
+        console.error("Error deleting image from Cloudinary:", imageError);
+        // Continue with deletion even if image deletion fails
+      }
+    }
+    
+    // Delete PDF from Cloudinary
+    if (book.pdfFile && book.pdfPublicId) {
+      try {
+        console.log("Deleting PDF with public ID:", book.pdfPublicId);
+        await cloudinary.uploader.destroy(book.pdfPublicId, { resource_type: "raw" });
+        console.log("PDF deleted from Cloudinary");
+      } catch (pdfError) {
+        console.error("Error deleting PDF from Cloudinary:", pdfError);
+        // Continue with deletion even if PDF deletion fails
+      }
+    }
+    
+    await book.deleteOne();
+    console.log("Book deleted successfully");
+    return res.json({ message: "Book deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting book:", error);
+    return res.status(500).json({ message: "Failed to delete book" });
+  }
+});
+
+// Admin delete book route
+router.delete("/books/:id", async (req, res) => {
+  try {
+    const book = await Book.findById(req.params.id);
+    if (!book) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Book not found" 
+      });
     }
 
     // Delete image from Cloudinary
@@ -714,96 +821,28 @@ router.delete("/:id", protectRoute, async (req, res) => {
       }
     }
 
-    // Handle PDF deletion with multiple approaches
-    if (book.pdfFile && book.pdfFile.includes("cloudinary")) {
-      const pdfUrl = book.pdfFile;
-      console.log("PDF URL to delete:", pdfUrl);
-      
+    // Delete PDF from Cloudinary
+    if (book.pdfFile && book.pdfPublicId) {
       try {
-        // APPROACH 1: Extract from URL structure
-        const uploadIndex = pdfUrl.indexOf('/upload/');
-        if (uploadIndex !== -1) {
-          // Get everything after "/upload/" including version
-          const fullPath = pdfUrl.substring(uploadIndex + 8).split('?')[0];
-          console.log("Approach 1 - Full path after /upload/:", fullPath);
-          
-          try {
-            const result1 = await cloudinary.uploader.destroy(fullPath, { 
-              resource_type: "raw",
-              invalidate: true
-            });
-            console.log("Approach 1 result:", result1);
-          } catch (err) {
-            console.error("Approach 1 failed:", err.message);
-          }
-        }
-
-        // APPROACH 2: Use stored publicId if available
-        if (book.pdfPublicId) {
-          console.log("Approach 2 - Using stored publicId:", book.pdfPublicId);
-          try {
-            const result2 = await cloudinary.uploader.destroy(book.pdfPublicId, { 
-              resource_type: "raw",
-              invalidate: true
-            });
-            console.log("Approach 2 result:", result2);
-          } catch (err) {
-            console.error("Approach 2 failed:", err.message);
-          }
-        }
-
-        // APPROACH 3: Parse URL differently
-        // Extract just the filename without extension
-        const filename = pdfUrl.split('/').pop().split('.')[0].split('?')[0];
-        console.log("Approach 3 - Filename:", filename);
-        
-        // Try to construct the public ID by getting folder path
-        const parts = pdfUrl.split('/');
-        const versionIndex = parts.findIndex(part => part.startsWith('v'));
-        if (versionIndex !== -1 && versionIndex + 1 < parts.length) {
-          // Get the folder structure if any (between version and filename)
-          const folderPath = parts.slice(versionIndex + 1, -1).join('/');
-          const publicId = folderPath ? `${folderPath}/${filename}` : filename;
-          console.log("Approach 3 - Constructed publicId:", publicId);
-          
-          try {
-            const result3 = await cloudinary.uploader.destroy(publicId, { 
-              resource_type: "raw",
-              invalidate: true
-            });
-            console.log("Approach 3 result:", result3);
-          } catch (err) {
-            console.error("Approach 3 failed:", err.message);
-          }
-        }
-        
-        // APPROACH 4: Parse URL by "pdfs/" pattern based on your upload code
-        if (pdfUrl.includes('pdfs/')) {
-          const pdfsPart = pdfUrl.split('pdfs/')[1].split('?')[0];
-          const publicId = `pdfs/${pdfsPart}`;
-          console.log("Approach 4 - PDF publicId from 'pdfs/' pattern:", publicId);
-          
-          try {
-            const result4 = await cloudinary.uploader.destroy(publicId, { 
-              resource_type: "raw",
-              invalidate: true
-            });
-            console.log("Approach 4 result:", result4);
-          } catch (err) {
-            console.error("Approach 4 failed:", err.message);
-          }
-        }
-        
-      } catch (error) {
-        console.error("All PDF deletion approaches failed:", error);
+        console.log("Deleting PDF with public ID:", book.pdfPublicId);
+        await cloudinary.uploader.destroy(book.pdfPublicId, { resource_type: "raw" });
+        console.log("PDF deleted from Cloudinary");
+      } catch (pdfError) {
+        console.error("Error deleting PDF from Cloudinary:", pdfError);
       }
     }
 
     await book.deleteOne();
-    res.json({ message: "Book deleted successfully" });
+    res.json({ 
+      success: true,
+      message: "Book deleted successfully" 
+    });
   } catch (error) {
-    console.error("Error deleting book:", error);
-    res.status(500).json({ message: "Failed to delete book" });
+    console.error("Admin - Error deleting book:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to delete book" 
+    });
   }
 });
 
